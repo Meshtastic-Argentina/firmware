@@ -7,6 +7,7 @@
 #if HAS_SCREEN
 #include "OLEDDisplayUi.h"
 #endif
+#include <functional>
 #include <vector>
 
 #define ROUTE_SIZE sizeof(((meshtastic_RouteDiscovery *)0)->route) / sizeof(((meshtastic_RouteDiscovery *)0)->route[0])
@@ -23,7 +24,7 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
   public:
     TraceRouteModule();
 
-    bool startTraceRoute(NodeNum node);
+    bool startTraceRoute(NodeNum node, unsigned long timeoutMs = 0); // 0 = use default (10s)
     void launch(NodeNum node);
     void handleTraceRouteResult(const String &result);
     bool shouldDraw();
@@ -37,6 +38,12 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
 
     void processUpgradedPacket(const meshtastic_MeshPacket &mp);
+
+    // Register a callback invoked when a trace this module started completes or times out.
+    void setResultObserver(std::function<void(NodeNum, const meshtastic_RouteDiscovery *, const String &)> cb)
+    {
+        resultCallback = cb;
+    }
 
   protected:
     bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r) override;
@@ -75,15 +82,17 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     TraceRouteRunState runState = TRACEROUTE_STATE_IDLE;
     unsigned long lastTraceRouteTime = 0;
     unsigned long resultShowTime = 0;
-    unsigned long cooldownMs = 30000;
+    unsigned long cooldownMs = 0; // was 30000 — disabled for now (in-flight one-at-a-time guard still applies)
     unsigned long resultDisplayMs = 10000;
-    unsigned long trackingTimeoutMs = 10000;
+    unsigned long trackingTimeoutMs = 10000;       // default for menu-initiated traces
+    unsigned long activeTrackingTimeoutMs = 10000; // resolved per-trace; read by runOnce() timeout check
     String bannerText;
     String resultText;
     std::vector<String> resultLines;
     bool resultLinesDirty = false;
     NodeNum tracingNode = 0;
     bool initialized = false;
+    std::function<void(NodeNum, const meshtastic_RouteDiscovery *, const String &)> resultCallback = nullptr;
 };
 
 extern TraceRouteModule *traceRouteModule;
