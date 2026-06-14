@@ -261,6 +261,8 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
             }
 
             LOG_INFO("Trace route result: %s", result.c_str());
+            if (resultCallback)
+                resultCallback(tracingNode, r, result); // raw route for custom formatting (e.g. ReplyBot)
             handleTraceRouteResult(result);
         }
     }
@@ -506,7 +508,7 @@ const char *TraceRouteModule::getNodeName(NodeNum node)
     return fallback;
 }
 
-bool TraceRouteModule::startTraceRoute(NodeNum node)
+bool TraceRouteModule::startTraceRoute(NodeNum node, unsigned long timeoutMs)
 {
     LOG_INFO("=== TraceRoute startTraceRoute CALLED: node=0x%08x ===", node);
     unsigned long now = millis();
@@ -569,6 +571,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     tracingNode = node;
     lastTraceRouteTime = now;
     runState = TRACEROUTE_STATE_TRACKING;
+    activeTrackingTimeoutMs = timeoutMs ? timeoutMs : trackingTimeoutMs; // per-call override (/route), else default
     resultText = "";
     clearResultLines();
     bannerText = String("Tracing ") + getNodeName(node);
@@ -692,6 +695,7 @@ void TraceRouteModule::launch(NodeNum node)
     }
 
     runState = TRACEROUTE_STATE_TRACKING;
+    activeTrackingTimeoutMs = trackingTimeoutMs; // menu favorite path always uses the default (never inherits /route's)
     tracingNode = node;
     lastTraceRouteTime = now;
     resultText = "";
@@ -824,11 +828,13 @@ int32_t TraceRouteModule::runOnce()
     }
 
     // Check for tracking timeout
-    if (runState == TRACEROUTE_STATE_TRACKING && now - lastTraceRouteTime > trackingTimeoutMs) {
+    if (runState == TRACEROUTE_STATE_TRACKING && now - lastTraceRouteTime > activeTrackingTimeoutMs) {
         LOG_INFO("TraceRoute timeout, no response received");
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("No response received");
         resultShowTime = now;
+        if (resultCallback)
+            resultCallback(tracingNode, nullptr, String("No response received"));
         tracingNode = 0;
 
         requestFocus();
