@@ -14,6 +14,18 @@ class ReplyBotModule : public SinglePortModule
 
   protected:
     bool isCommand(const char *msg) const;
-    void sendDm(const meshtastic_MeshPacket &rx, const char *text);
+    const char *matchKeyword(const char *msg) const;                  // returns response string or nullptr
+    bool buildStatusReply(const char *msg, char *out, size_t outLen); // dynamic /net, /node
+    void sendChannelReply(const meshtastic_MeshPacket &rx, const char *text);
+    void onTraceRouteResult(uint32_t tracedNode, const meshtastic_RouteDiscovery *route,
+                            const char *fallback); // called via TraceRouteModule observer
+
+    // Single in-flight /route request (traceroute runs one at a time).
+    bool traceCbRegistered = false;
+    bool tracePending = false;
+    uint32_t traceRequester = 0; // node to reply to
+    uint8_t traceChannel = 0;
+    bool traceIsDM = false;
+    uint32_t traceMsgId = 0; // id of the /route message, for reply_id on the async result
 };
 #endif // MESHTASTIC_EXCLUDE_REPLYBOT
