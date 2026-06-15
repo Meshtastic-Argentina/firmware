@@ -22,7 +22,7 @@ version. Please be considerate with auto-replies on busy public channels.
 ### Build & flash (PlatformIO)
 
 ```sh
-git clone --recurse-submodules <your-fork-url> && cd firmware
+git clone --recurse-submodules https://github.com/Meshtastic-Argentina/firmware.git && cd firmware
 pio run -e heltec-v3 -t upload     # Heltec V3 (ESP32-S3): build + flash over USB
 pio run -e rak3401-1watt           # RAK WisMesh 1W: build, then drag the .uf2 onto the
                                    #   UF2 bootloader drive (double-tap reset to mount it)
