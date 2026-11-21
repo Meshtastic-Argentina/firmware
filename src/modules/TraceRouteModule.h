@@ -24,7 +24,7 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
   public:
     TraceRouteModule();
 
-    bool startTraceRoute(NodeNum node, unsigned long timeoutMs = 0); // 0 = use default (10s)
+    bool startTraceRoute(NodeNum node, unsigned long timeoutMs = 0, uint8_t channel = 0); // 0 = use default (10s)
     void launch(NodeNum node);
     void handleTraceRouteResult(const String &result);
     bool shouldDraw();

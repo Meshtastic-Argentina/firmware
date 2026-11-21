@@ -4,8 +4,7 @@
  * ReplyBotModule.cpp
  *
  * A simple reply bot for the Meshtastic firmware.  It listens for text "slash commands"
- * delivered either via a direct message (DM) or a broadcast on any configured channel,
- * and auto-replies where the request arrived (on that same channel, or by DM for a DM).
+ * broadcast on the secondary channel named exactly ambaBOTs and replies on that channel.
  * Supported commands:
  *   /ping /hello /test  - "mic check": reports hops/RSSI/SNR of the request
  *                         (also triggered by the bare whole-words "test" / "ping")
@@ -19,6 +18,7 @@
  * Enabled by leaving MESHTASTIC_EXCLUDE_REPLYBOT undefined (see platformio.ini).
  */
 
+#include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerStatus.h"
@@ -38,7 +38,7 @@
 //
 // Each sender is tracked in a small ring buffer.  When a message arrives from a
 // sender we check the last time we responded to them.  If the difference is
-// less than the configured cooldown (different values for DM vs broadcast)
+// less than the configured cooldown
 // the message is ignored; otherwise we update the last response time and
 // proceed with replying.
 
@@ -50,8 +50,7 @@ struct ReplyBotCooldownEntry {
 static constexpr uint8_t REPLYBOT_COOLDOWN_SLOTS = 8;          // ring buffer size
 // Cooldowns disabled for now — respond immediately to every command.
 // Restore (e.g. 10 * 1000) to re-enable per-sender rate limiting in future versions.
-static constexpr uint32_t REPLYBOT_DM_COOLDOWN_MS = 0; // was 10 * 1000 (10 s for DMs)
-static constexpr uint32_t REPLYBOT_LF_COOLDOWN_MS = 0; // was 10 * 1000 (10 s for broadcasts)
+static constexpr uint32_t REPLYBOT_COOLDOWN_MS = 0;
 
 // /route waits longer than the 10 s on-device-menu default, since multi-hop traces on a busy mesh
 // can take a while to round-trip. Only applies to bot-initiated traces (passed into startTraceRoute).
@@ -124,26 +123,23 @@ void ReplyBotModule::setup()
     // always enabled when compiled in.
 }
 
-// Determine whether we want to process this packet.  We only care about
-// plain text messages addressed to our port.
+// Index zero is also the router's automatic channel selection for addressed traceroutes.
+static bool isBotChannel(uint8_t index)
+{
+    if (index == 0 || index >= channels.getNumChannels())
+        return false;
+    const auto &channel = channels.getByIndex(index);
+    return channel.role == meshtastic_Channel_Role_SECONDARY && channel.has_settings &&
+           strcmp(channel.settings.name, "ambaBOTs") == 0;
+}
+
 bool ReplyBotModule::wantPacket(const meshtastic_MeshPacket *p)
 {
-    return (p && p->decoded.portnum == ourPortNum);
+    return p && p->decoded.portnum == ourPortNum && p->to == NODENUM_BROADCAST && isBotChannel(p->channel);
 }
 
 ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    // Accept direct messages to us, or broadcasts on ANY channel the device is
-    // configured for. A received broadcast was already decrypted, so mp.channel
-    // is a valid channel index; sendChannelReply() replies back on that same
-    // channel. (Previously restricted to the Primary channel only.)
-    const uint32_t ourNode = nodeDB->getNodeNum();
-    const bool isDM = (mp.to == ourNode);
-    const bool isChannelBroadcast = isBroadcast(mp.to);
-    if (!isDM && !isChannelBroadcast) {
-        return ProcessMessage::CONTINUE;
-    }
-
     // Ignore empty payloads
     if (mp.decoded.payload.size == 0) {
         return ProcessMessage::CONTINUE;
@@ -158,7 +154,7 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
     memcpy(buf, mp.decoded.payload.bytes, n);
 
     // Decide what kind of reply (if any) this message warrants:
-    //  - mic-check commands (/ping /hello /test): signal report, replied via DM
+    //  - mic-check commands (/ping /hello /test): signal report
     //  - status commands (/net /node): live network/device info, computed now
     //  - keyword table (/help ...): static canned response
     const bool isMicCheck = isCommand(buf);
@@ -171,15 +167,12 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
     }
 
-    // Apply rate limiting per sender depending on DM/broadcast
-    const uint32_t cooldownMs = isDM ? REPLYBOT_DM_COOLDOWN_MS : REPLYBOT_LF_COOLDOWN_MS;
-    if (replybotRateLimited(mp.from, cooldownMs)) {
+    if (replybotRateLimited(mp.from, REPLYBOT_COOLDOWN_MS)) {
         return ProcessMessage::CONTINUE;
     }
 
     if (isMicCheck || isWord) {
-        // Mic-check: report how well the sender's signal reached us, replied where it was
-        // asked (on the channel for a channel broadcast, via DM for a DM).
+        // Report how well the sender’s signal reached us.
         int hopsAway = getHopsAway(mp);
         int rssi = mp.rx_rssi;
         if (rssi > 0) {
@@ -199,13 +192,12 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
             });
             traceCbRegistered = true;
         }
-        if (!traceRouteModule || tracePending || !traceRouteModule->startTraceRoute(mp.from, REPLYBOT_ROUTE_TIMEOUT_MS)) {
+        if (!traceRouteModule || tracePending || !traceRouteModule->startTraceRoute(mp.from, REPLYBOT_ROUTE_TIMEOUT_MS, mp.channel)) {
             sendChannelReply(mp, "🛤 trace busy, try again shortly");
         } else {
             tracePending = true;
             traceRequester = mp.from;
             traceChannel = mp.channel;
-            traceIsDM = isDM;
             traceMsgId = mp.id;
             LOG_INFO("ReplyBot /route: tracing 0x%0x", mp.from);
             sendChannelReply(mp, "🛤 Trace started — this can take a few seconds. Please wait for the result (or a timeout).");
@@ -327,16 +319,13 @@ bool ReplyBotModule::buildStatusReply(const char *msg, char *out, size_t outLen)
     return false;
 }
 
-// Send a reply on the same channel the triggering message arrived on.  For a
-// broadcast trigger the response is broadcast back on that channel so everyone
-// sees it; for a direct message the response is sent privately to the sender.
+// Recheck the slot before sending, since a pending traceroute can outlive a channel edit.
 void ReplyBotModule::sendChannelReply(const meshtastic_MeshPacket &rx, const char *text)
 {
-    if (!text)
+    if (!text || !isBotChannel(rx.channel))
         return;
     meshtastic_MeshPacket *p = allocDataPacket();
-    const bool isDM = (rx.to == nodeDB->getNodeNum());
-    p->to = isDM ? rx.from : NODENUM_BROADCAST;
+    p->to = NODENUM_BROADCAST;
     p->channel = rx.channel;
     p->decoded.reply_id = rx.id; // render as a reply to the original command message
     p->want_ack = false;
@@ -443,8 +432,6 @@ void ReplyBotModule::onTraceRouteResult(uint32_t tracedNode, const meshtastic_Ro
 
     // Synthesize an rx so sendChannelReply targets the requester/channel and threads to the /route msg.
     meshtastic_MeshPacket rx = {};
-    rx.from = traceRequester;
-    rx.to = traceIsDM ? nodeDB->getNodeNum() : NODENUM_BROADCAST;
     rx.channel = traceChannel;
     rx.id = traceMsgId;
 

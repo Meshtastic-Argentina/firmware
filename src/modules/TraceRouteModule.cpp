@@ -508,7 +508,7 @@ const char *TraceRouteModule::getNodeName(NodeNum node)
     return fallback;
 }
 
-bool TraceRouteModule::startTraceRoute(NodeNum node, unsigned long timeoutMs)
+bool TraceRouteModule::startTraceRoute(NodeNum node, unsigned long timeoutMs, uint8_t channel)
 {
     LOG_INFO("=== TraceRoute startTraceRoute CALLED: node=0x%08x ===", node);
     unsigned long now = millis();
@@ -595,6 +595,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node, unsigned long timeoutMs)
     if (p) {
         // Set destination and port
         p->to = node;
+        p->channel = channel;
         p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
         p->decoded.want_response = true;
 

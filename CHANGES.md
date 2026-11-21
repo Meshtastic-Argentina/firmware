@@ -10,7 +10,7 @@ Compare this branch with the original release using `git diff v2.7.26.54e0d8d..H
 ### ReplyBotModule — expanded into a full auto-responder
 `src/modules/ReplyBotModule.{cpp,h}` — upstream ships a ~180-line example reply bot that is excluded
 from builds by default; MeshArg expands it to a ~480-line auto-responder. It listens for text "slash
-commands" received via DM or as a broadcast on **any configured channel**, and replies on that same
+commands" broadcast on the secondary channel named exactly **ambaBOTs**. It ignores DMs and other channels, and replies on the bot
 channel as a **threaded reply**:
 
 - `/ping` `/hello` `/test` — "mic check": reports the request's hops-away, RSSI, and SNR.
@@ -31,8 +31,8 @@ Enabled at build time via `platformio.ini` (below).
 - Added a **result-observer callback** (`setResultObserver`) so another module (ReplyBot) is notified
   when a trace it started completes or times out — receiving the raw `RouteDiscovery` on success or a
   fallback string on timeout.
-- Added an optional **per-call tracking timeout**: `startTraceRoute(node, timeoutMs = 0)`, resolved
-  into `activeTrackingTimeoutMs` at the TRACKING transition. ReplyBot's `/route` passes 30 s; the
+- Added an optional **per-call tracking timeout**: `startTraceRoute(node, timeoutMs = 0, channel = 0)`, resolved
+  into `activeTrackingTimeoutMs` at the TRACKING transition. ReplyBot's `/route` passes 30 s and the bot channel index; the
   on-device menu (`launch()` and the node-picker) keeps the stock 10 s and never inherits the bot's
   value.
 
