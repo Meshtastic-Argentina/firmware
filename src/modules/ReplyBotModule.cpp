@@ -135,7 +135,10 @@ static bool isBotChannel(uint8_t index)
 
 bool ReplyBotModule::wantPacket(const meshtastic_MeshPacket *p)
 {
-    return p && p->decoded.portnum == ourPortNum && p->to == NODENUM_BROADCAST && isBotChannel(p->channel);
+    if (!p || p->decoded.portnum != ourPortNum)
+        return false;
+    const bool isDM = p->to == nodeDB->getNodeNum();
+    return isDM || (p->to == NODENUM_BROADCAST && isBotChannel(p->channel));
 }
 
 ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -192,12 +195,15 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
             });
             traceCbRegistered = true;
         }
-        if (!traceRouteModule || tracePending || !traceRouteModule->startTraceRoute(mp.from, REPLYBOT_ROUTE_TIMEOUT_MS, mp.channel)) {
+        const bool isDM = mp.to == nodeDB->getNodeNum();
+        const uint8_t replyChannel = isDM ? 0 : mp.channel;
+        if (!traceRouteModule || tracePending || !traceRouteModule->startTraceRoute(mp.from, REPLYBOT_ROUTE_TIMEOUT_MS, replyChannel)) {
             sendChannelReply(mp, "🛤 trace busy, try again shortly");
         } else {
             tracePending = true;
             traceRequester = mp.from;
-            traceChannel = mp.channel;
+            traceChannel = replyChannel;
+            traceIsDM = isDM;
             traceMsgId = mp.id;
             LOG_INFO("ReplyBot /route: tracing 0x%0x", mp.from);
             sendChannelReply(mp, "🛤 Trace started — this can take a few seconds. Please wait for the result (or a timeout).");
@@ -322,10 +328,11 @@ bool ReplyBotModule::buildStatusReply(const char *msg, char *out, size_t outLen)
 // Recheck the slot before sending, since a pending traceroute can outlive a channel edit.
 void ReplyBotModule::sendChannelReply(const meshtastic_MeshPacket &rx, const char *text)
 {
-    if (!text || !isBotChannel(rx.channel))
+    const bool isDM = rx.to == nodeDB->getNodeNum();
+    if (!text || (!isDM && !isBotChannel(rx.channel)))
         return;
     meshtastic_MeshPacket *p = allocDataPacket();
-    p->to = NODENUM_BROADCAST;
+    p->to = isDM ? rx.from : NODENUM_BROADCAST;
     p->channel = rx.channel;
     p->decoded.reply_id = rx.id; // render as a reply to the original command message
     p->want_ack = false;
@@ -432,7 +439,7 @@ void ReplyBotModule::onTraceRouteResult(uint32_t tracedNode, const meshtastic_Ro
 
     // Synthesize an rx so sendChannelReply targets the requester/channel and threads to the /route msg.
     meshtastic_MeshPacket rx = {};
-    rx.channel = traceChannel;
+    rx.to = traceIsDM ? nodeDB->getNodeNum() : NODENUM_BROADCAST;
     rx.id = traceMsgId;
 
     if (!route) { // timeout / no result

@@ -9,7 +9,7 @@ distributed under the **GNU GPL-3.0** — the same license as upstream (see [LIC
 
 ### What's different from upstream
 
-This branch is based on upstream stable `v2.7.26.54e0d8d`. Its default build includes a **ReplyBot** auto-responder that replies to text "slash commands" broadcast on the secondary channel named exactly `ambaBOTs`: `/ping` `/hello` `/test` (signal mic-check) · `/net` (+ `/info`, bare `net`/`info` — mesh
+This branch is based on upstream stable `v2.7.26.54e0d8d`. Its default build includes a **ReplyBot** auto-responder that replies to text "slash commands" broadcast in DMs or as broadcasts on the secondary channel named exactly `ambaBOTs`. Replies follow the request. `/ping` `/hello` `/test` (signal mic-check) · `/net` (+ `/info`, bare `net`/`info` — mesh
 health) · `/node` (device status) · `/route` (traceroute the path back to you) · `/help`, plus
 bare-word `test`/`ping`. Replies are threaded; `/route` uses a 30 s timeout. Full list →
 **[CHANGES.md](CHANGES.md)**.

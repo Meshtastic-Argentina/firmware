@@ -25,6 +25,7 @@ class ReplyBotModule : public SinglePortModule
     bool tracePending = false;
     uint32_t traceRequester = 0; // node to reply to
     uint8_t traceChannel = 0;
+    bool traceIsDM = false;
     uint32_t traceMsgId = 0; // id of the /route message, for reply_id on the async result
 };
 #endif // MESHTASTIC_EXCLUDE_REPLYBOT
