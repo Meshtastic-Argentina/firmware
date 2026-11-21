@@ -355,11 +355,11 @@ void ReplyBotModule::sendChannelReply(const meshtastic_MeshPacket &rx, const cha
 static void replybotNodeLabel(char *label, size_t cap, uint32_t node)
 {
     meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    bool named = info && nodeInfoLiteHasUser(info) && (info->long_name[0] || info->short_name[0]);
-    if (named && info->long_name[0] && info->short_name[0])
-        snprintf(label, cap, "%s [%s] 0x%08x", info->long_name, info->short_name, node);
+    bool named = info && info->has_user && (info->user.long_name[0] || info->user.short_name[0]);
+    if (named && info->user.long_name[0] && info->user.short_name[0])
+        snprintf(label, cap, "%s [%s] 0x%08x", info->user.long_name, info->user.short_name, node);
     else if (named)
-        snprintf(label, cap, "%s 0x%08x", info->long_name[0] ? info->long_name : info->short_name, node);
+        snprintf(label, cap, "%s 0x%08x", info->user.long_name[0] ? info->user.long_name : info->user.short_name, node);
     else
         snprintf(label, cap, "0x%08x", node);
 }
