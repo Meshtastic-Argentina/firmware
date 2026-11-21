@@ -1,3 +1,39 @@
+# MeshArg Firmware
+
+> **A community fork of [Meshtastic®](https://meshtastic.org) firmware**, maintained by the MeshArg group.
+> **Not affiliated with, endorsed by, or sponsored by Meshtastic LLC.** Meshtastic® is a registered
+> trademark of Meshtastic LLC; this is an independent, modified derivative.
+
+Modified fork of the official **[meshtastic/firmware](https://github.com/meshtastic/firmware)**,
+distributed under the **GNU GPL-3.0** — the same license as upstream (see [LICENSE](LICENSE)).
+
+### What's different from upstream
+
+This branch is based on upstream stable `v2.7.26.54e0d8d`. Its default build includes a **ReplyBot** auto-responder that replies to text "slash commands" on the channel they were
+asked on: `/ping` `/hello` `/test` (signal mic-check) · `/net` (+ `/info`, bare `net`/`info` — mesh
+health) · `/node` (device status) · `/route` (traceroute the path back to you) · `/help`, plus
+bare-word `test`/`ping`. Replies are threaded; `/route` uses a 30 s timeout. Full list →
+**[CHANGES.md](CHANGES.md)**.
+
+These changes are **app-layer only** (text replies) — no changes to the mesh packet format, routing,
+or encryption — so MeshArg nodes interoperate normally with stock Meshtastic nodes on the same major
+version. Please be considerate with auto-replies on busy public channels.
+
+### Build & flash (PlatformIO)
+
+```sh
+git clone --branch mesharg-stable-2.7.26 --recurse-submodules https://github.com/Meshtastic-Argentina/firmware.git && cd firmware
+pio run -e heltec-v3 -t upload     # Heltec V3 (ESP32-S3): build + flash over USB
+pio run -e rak3401-1watt           # RAK WisMesh 1W: build, then drag the .uf2 onto the
+                                   #   UF2 bootloader drive (double-tap reset to mount it)
+```
+
+---
+
+<sub>The original upstream Meshtastic README is preserved below for attribution.</sub>
+
+---
+
 <div align="center" markdown="1">
 
 <img src=".github/meshtastic_logo.png" alt="Meshtastic Logo" width="80"/>
